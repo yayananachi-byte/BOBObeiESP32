@@ -17,6 +17,7 @@ typedef enum {
     BLE_CONTROL_MANUAL = 0,
     BLE_CONTROL_GAME,
     BLE_CONTROL_MOTION,
+    BLE_CONTROL_PATTERN,
     BLE_CONTROL_SOURCE_COUNT,
 } ble_control_source_t;
 

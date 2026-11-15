@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app_settings.h"
 #include "ble_client.h"
 #include "bsp/esp-bsp.h"
 #include "driver/gpio.h"
@@ -136,9 +137,14 @@ static void game_task(void *arg)
                                            linear_z * linear_z);
             motion_accel = motion_accel * 0.70f + linear_magnitude * 0.30f;
 
+            app_settings_t settings;
+            app_settings_get(&settings);
+
             const float motion_dead_zone = 0.35f;
             const float motion_full_scale = 7.0f;
-            float motion_ratio = (motion_accel - motion_dead_zone) /
+            float adjusted_motion_accel = motion_accel *
+                ((float)settings.motion_sensitivity / 100.0f);
+            float motion_ratio = (adjusted_motion_accel - motion_dead_zone) /
                                  (motion_full_scale - motion_dead_zone);
             uint8_t motion_intensity = (uint8_t)lroundf(
                 clampf(motion_ratio, 0.0f, 1.0f) * 100.0f);
@@ -151,15 +157,24 @@ static void game_task(void *arg)
             filtered_x = filtered_x * 0.72f + dx * 0.28f;
             filtered_y = filtered_y * 0.72f + dy * 0.28f;
 
-            float magnitude = sqrtf(filtered_x * filtered_x + filtered_y * filtered_y);
+            float game_gain = (float)settings.ball_sensitivity / 100.0f;
+            float adjusted_x = filtered_x * game_gain;
+            float adjusted_y = filtered_y * game_gain;
+            float magnitude = sqrtf(adjusted_x * adjusted_x + adjusted_y * adjusted_y);
             float angle_deg = atan2f(magnitude, 9.80665f) * 57.2957795f;
             uint8_t intensity = (uint8_t)lroundf(clampf(angle_deg / 45.0f, 0.0f, 1.0f) * 100.0f);
+            if (intensity > settings.ball_limit) {
+                intensity = settings.ball_limit;
+            }
+            float ball_limit = (float)settings.ball_limit / 100.0f;
 
             imu_game_snapshot_t local;
             imu_motion_snapshot_t motion_local;
             portENTER_CRITICAL(&s_game_lock);
-            s_snapshot.ball_x = clampf(-filtered_x / 7.0f, -1.0f, 1.0f);
-            s_snapshot.ball_y = clampf(filtered_y / 7.0f, -1.0f, 1.0f);
+            s_snapshot.ball_x = clampf(-adjusted_x / 7.0f,
+                                       -ball_limit, ball_limit);
+            s_snapshot.ball_y = clampf(adjusted_y / 7.0f,
+                                       -ball_limit, ball_limit);
             s_snapshot.intensity = s_snapshot.running ? intensity : 0;
             local = s_snapshot;
             s_motion.acceleration = motion_accel;

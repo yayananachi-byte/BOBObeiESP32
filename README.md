@@ -5,7 +5,9 @@ Target: Waveshare ESP32-S3-Touch-AMOLED-2.16 (480 x 480 AMOLED).
 ## Features
 
 - Fast BLE scan with selectable device list and highlighted `SOSEXY` device.
-- 2 x 2 home screen with Control, BLE, Balance Ball, and Motion cards.
+- Swipeable home screen: the first 2 x 2 page contains Control, BLE,
+  Balance Ball, and Motion; the second page contains Settings, Vibration
+  Patterns, and two reserved cards.
 - BLE GATT write to `0000ee03-0000-1000-8000-00805f9b34fb`.
 - Independent 0-100 vertical controls for suction, vibration, and electric output.
 - Manual suction, vibration, and electric values persist independently while
@@ -21,6 +23,15 @@ Target: Waveshare ESP32-S3-Touch-AMOLED-2.16 (480 x 480 AMOLED).
 - Event-driven, fair BLE command queue with latest-value coalescing and a
   requested 7.5-15 ms connection interval.
 - BOOT/GPIO0 resets the ball center. Electric output is disabled whenever the game starts.
+- NVS-backed settings for ball sensitivity, ball travel/output limit, motion
+  sensitivity, and display brightness.
+- Live AXP2101 battery percentage and charging-state display.
+- Three selectable vibration patterns: a five-second 0-100 ramp, with a
+  250 ms peak and an
+  immediate reset to zero; a random 20/40/60/80/100 level every five seconds;
+  and a 100% pulse with one second on and one second off. Pattern outputs have
+  independent suction/vibration/electric switches; only vibration is enabled
+  initially, and electric is reset to off every time the pattern starts.
 - Global STOP button on every page.
 
 ## Build and flash

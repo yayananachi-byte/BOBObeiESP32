@@ -4,9 +4,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "app_settings.h"
 #include "ble_client.h"
+#include "esp_err.h"
+#include "bsp/display.h"
 #include "imu_game.h"
 #include "lvgl.h"
+#include "power_status.h"
+#include "pattern_control.h"
 
 #define COLOR_BG       0x12000F
 #define COLOR_CARD     0x2A0828
@@ -18,20 +23,34 @@
 #define COLOR_MUTED    0xC9A7C1
 #define COLOR_GREEN    0x58E6A9
 #define COLOR_RED      0xFF426D
-#define STATUS_COUNT   6
+#define STATUS_COUNT   7
 
 typedef enum {
     HOME_CONTROL,
     HOME_BLE,
     HOME_GAME,
     HOME_MOTION,
+    HOME_SETTINGS,
+    HOME_PATTERN,
+    HOME_PENDING,
 } home_action_t;
 
+typedef enum {
+    SETTING_BALL_SENSITIVITY,
+    SETTING_BALL_LIMIT,
+    SETTING_MOTION_SENSITIVITY,
+    SETTING_BRIGHTNESS,
+    SETTING_COUNT,
+} setting_id_t;
+
 static lv_obj_t *s_home_view;
+static lv_obj_t *s_home_tileview;
 static lv_obj_t *s_ble_view;
 static lv_obj_t *s_control_view;
 static lv_obj_t *s_game_view;
 static lv_obj_t *s_motion_view;
+static lv_obj_t *s_settings_view;
+static lv_obj_t *s_pattern_view;
 static lv_obj_t *s_control_tileview;
 static lv_obj_t *s_status_labels[STATUS_COUNT];
 static lv_obj_t *s_device_list;
@@ -47,6 +66,13 @@ static lv_obj_t *s_motion_state;
 static lv_obj_t *s_motion_start_label;
 static lv_obj_t *s_motion_bar;
 static lv_obj_t *s_motion_switches[MOTOR_COUNT];
+static lv_obj_t *s_setting_values[SETTING_COUNT];
+static lv_obj_t *s_battery_label;
+static lv_obj_t *s_battery_bar;
+static lv_obj_t *s_pattern_buttons[PATTERN_COUNT];
+static lv_obj_t *s_pattern_switches[MOTOR_COUNT];
+static lv_obj_t *s_pattern_value;
+static lv_obj_t *s_pattern_start_label;
 static uint32_t s_seen_scan_generation = UINT32_MAX;
 static lv_coord_t s_back_start_y;
 static bool s_back_drag_active;
@@ -80,6 +106,8 @@ static void show_view(lv_obj_t *view)
     lv_obj_add_flag(s_control_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_game_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_motion_view, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_settings_view, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_pattern_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(view);
 }
@@ -89,6 +117,7 @@ static void stop_event(lv_event_t *event)
     (void)event;
     imu_game_set_running(false);
     imu_motion_set_running(false);
+    pattern_control_set_running(false);
     ble_client_stop_all();
 }
 
@@ -122,6 +151,14 @@ static void home_button_event(lv_event_t *event)
     case HOME_MOTION:
         show_view(s_motion_view);
         break;
+    case HOME_SETTINGS:
+        show_view(s_settings_view);
+        break;
+    case HOME_PATTERN:
+        show_view(s_pattern_view);
+        break;
+    case HOME_PENDING:
+        break;
     default:
         break;
     }
@@ -144,6 +181,8 @@ static void back_swipe_event(lv_event_t *event)
     } else if (code == LV_EVENT_RELEASED && s_back_drag_active) {
         s_back_drag_active = false;
         if (s_back_start_y - point.y >= 38) {
+            int page = (int)(uintptr_t)lv_event_get_user_data(event);
+            lv_tileview_set_tile_by_index(s_home_tileview, page, 0, LV_ANIM_OFF);
             show_view(s_home_view);
         }
     } else if (code == LV_EVENT_PRESS_LOST) {
@@ -180,7 +219,7 @@ static lv_obj_t *create_header(lv_obj_t *page, const char *title,
     return header;
 }
 
-static void create_back_bar(lv_obj_t *page)
+static void create_back_bar(lv_obj_t *page, int home_page)
 {
     lv_obj_t *bar = lv_button_create(page);
     lv_obj_set_size(bar, 196, 38);
@@ -191,11 +230,16 @@ static void create_back_bar(lv_obj_t *page)
     lv_obj_set_style_border_color(bar, lv_color_hex(COLOR_MAGENTA), 0);
     lv_obj_set_style_shadow_width(bar, 14, 0);
     lv_obj_set_style_shadow_color(bar, lv_color_hex(COLOR_MAGENTA), 0);
-    lv_obj_add_event_cb(bar, back_swipe_event, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(bar, back_swipe_event, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(bar, back_swipe_event, LV_EVENT_PRESS_LOST, NULL);
+    lv_obj_add_event_cb(bar, back_swipe_event, LV_EVENT_PRESSED,
+                        (void *)(uintptr_t)home_page);
+    lv_obj_add_event_cb(bar, back_swipe_event, LV_EVENT_RELEASED,
+                        (void *)(uintptr_t)home_page);
+    lv_obj_add_event_cb(bar, back_swipe_event, LV_EVENT_PRESS_LOST,
+                        (void *)(uintptr_t)home_page);
 
-    lv_obj_t *label = make_label(bar, "^  SWIPE UP  -  HOME",
+    lv_obj_t *label = make_label(bar,
+                                 home_page == 0 ? "^  SWIPE UP  -  HOME" :
+                                                  "^  SWIPE UP  -  MENU",
                                  &lv_font_montserrat_12, COLOR_TEXT);
     lv_obj_center(label);
 }
@@ -237,11 +281,12 @@ static lv_obj_t *create_home_button(lv_obj_t *parent, int x, int y,
     return button;
 }
 
-static void create_home_view(lv_obj_t *screen)
+static lv_obj_t *create_home_frame(lv_obj_t *page, const char *title,
+                                   const lv_font_t *title_font)
 {
-    s_home_view = create_root_view(screen);
-
-    lv_obj_t *frame = lv_obj_create(s_home_view);
+    set_bg(page, COLOR_BG);
+    lv_obj_set_style_pad_all(page, 0, 0);
+    lv_obj_t *frame = lv_obj_create(page);
     lv_obj_set_size(frame, 440, 440);
     lv_obj_center(frame);
     set_bg(frame, COLOR_CARD);
@@ -252,16 +297,48 @@ static void create_home_view(lv_obj_t *screen)
     lv_obj_set_style_shadow_color(frame, lv_color_hex(COLOR_PURPLE), 0);
     lv_obj_remove_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *brand = make_label(frame, "SOSEXY REMOTE", &lv_font_montserrat_22, COLOR_PINK);
+    lv_obj_t *brand = make_label(frame, title, title_font, COLOR_PINK);
     lv_obj_align(brand, LV_ALIGN_TOP_MID, 0, 13);
+    return frame;
+}
+
+static void create_home_view(lv_obj_t *screen)
+{
+    s_home_view = create_root_view(screen);
+    s_home_tileview = lv_tileview_create(s_home_view);
+    lv_obj_set_size(s_home_tileview, lv_pct(100), lv_pct(100));
+    set_bg(s_home_tileview, COLOR_BG);
+    lv_obj_set_style_pad_all(s_home_tileview, 0, 0);
+    lv_obj_remove_flag(s_home_tileview, LV_OBJ_FLAG_SCROLL_ELASTIC);
+
+    lv_obj_t *main_page = lv_tileview_add_tile(s_home_tileview, 0, 0, LV_DIR_RIGHT);
+    lv_obj_t *more_page = lv_tileview_add_tile(s_home_tileview, 1, 0, LV_DIR_LEFT);
+
+    lv_obj_t *frame = create_home_frame(main_page, "SOSEXY REMOTE",
+                                        &lv_font_montserrat_22);
 
     create_home_button(frame, 30, 70, "控制", "CONTROL", cjk_font(), HOME_CONTROL);
     create_home_button(frame, 236, 70, "BLE", "BLUETOOTH", &lv_font_montserrat_22, HOME_BLE);
     create_home_button(frame, 30, 232, "小球", "BALANCE", cjk_font(), HOME_GAME);
     create_home_button(frame, 236, 232, "体感", "MOTION", cjk_font(), HOME_MOTION);
 
-    lv_obj_t *hint = make_label(frame, "Tap a card to enter", &lv_font_montserrat_12, COLOR_MUTED);
+    lv_obj_t *hint = make_label(frame, "Tap a card  |  SWIPE LEFT FOR MORE",
+                                &lv_font_montserrat_12, COLOR_MUTED);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -12);
+
+    lv_obj_t *more_frame = create_home_frame(more_page, "MORE FEATURES",
+                                             &lv_font_montserrat_22);
+    create_home_button(more_frame, 30, 70, "SETTINGS", "DEVICE CONFIG",
+                       &lv_font_montserrat_22, HOME_SETTINGS);
+    create_home_button(more_frame, 236, 70, "PATTERNS", "VIBRATION",
+                       &lv_font_montserrat_22, HOME_PATTERN);
+    create_home_button(more_frame, 30, 232, "PENDING", "COMING SOON",
+                       &lv_font_montserrat_22, HOME_PENDING);
+    create_home_button(more_frame, 236, 232, "PENDING", "COMING SOON",
+                       &lv_font_montserrat_22, HOME_PENDING);
+    lv_obj_t *more_hint = make_label(more_frame, "SWIPE RIGHT FOR HOME",
+                                     &lv_font_montserrat_12, COLOR_MUTED);
+    lv_obj_align(more_hint, LV_ALIGN_BOTTOM_MID, 0, -12);
 }
 
 static void slider_event(lv_event_t *event)
@@ -323,7 +400,7 @@ static void create_slider_page(lv_obj_t *page, motor_id_t motor,
                                  &lv_font_montserrat_12, COLOR_MUTED);
     lv_obj_align(swipe, LV_ALIGN_BOTTOM_RIGHT, -24, -30);
 
-    create_back_bar(page);
+    create_back_bar(page, 0);
 }
 
 static void rebuild_device_list(void)
@@ -384,7 +461,7 @@ static void create_ble_view(lv_obj_t *screen)
     lv_obj_set_flex_flow(s_device_list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_device_list, 12, 0);
     lv_obj_set_style_pad_row(s_device_list, 9, 0);
-    create_back_bar(s_ble_view);
+    create_back_bar(s_ble_view, 0);
 }
 
 static void create_control_view(lv_obj_t *screen)
@@ -516,7 +593,7 @@ static void create_game_view(lv_obj_t *screen)
     s_game_start_label = lv_obj_get_child(start, 0);
     lv_obj_t *reset = make_small_button(controls, "CENTER", 104, game_reset_event);
     lv_obj_align(reset, LV_ALIGN_BOTTOM_LEFT, 8, -6);
-    create_back_bar(s_game_view);
+    create_back_bar(s_game_view, 0);
 }
 
 static void motion_start_event(lv_event_t *event)
@@ -597,7 +674,228 @@ static void create_motion_view(lv_obj_t *screen)
     lv_obj_align(start, LV_ALIGN_BOTTOM_MID, 0, -10);
     s_motion_start_label = lv_obj_get_child(start, 0);
 
-    create_back_bar(s_motion_view);
+    create_back_bar(s_motion_view, 0);
+}
+
+static void pattern_select_event(lv_event_t *event)
+{
+    pattern_id_t pattern = (pattern_id_t)(uintptr_t)lv_event_get_user_data(event);
+    pattern_control_select(pattern);
+}
+
+static void pattern_start_event(lv_event_t *event)
+{
+    (void)event;
+    pattern_snapshot_t snapshot;
+    pattern_control_get_snapshot(&snapshot);
+    pattern_control_set_running(!snapshot.running);
+    if (!snapshot.running) {
+        lv_obj_remove_state(s_pattern_switches[MOTOR_ELECTRIC], LV_STATE_CHECKED);
+    }
+}
+
+static void pattern_motor_event(lv_event_t *event)
+{
+    motor_id_t motor = (motor_id_t)(uintptr_t)lv_event_get_user_data(event);
+    lv_obj_t *sw = lv_event_get_target_obj(event);
+    pattern_control_set_motor_enabled(motor,
+        lv_obj_has_state(sw, LV_STATE_CHECKED));
+}
+
+static void create_pattern_view(lv_obj_t *screen)
+{
+    s_pattern_view = create_root_view(screen);
+    create_header(s_pattern_view, "VIBRATION PATTERNS",
+                  &lv_font_montserrat_22, 6);
+
+    lv_obj_t *card = lv_obj_create(s_pattern_view);
+    lv_obj_set_size(card, 420, 340);
+    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 80);
+    set_bg(card, COLOR_CARD);
+    lv_obj_set_style_radius(card, 28, 0);
+    lv_obj_set_style_border_width(card, 2, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(COLOR_MAGENTA), 0);
+    lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    const char *titles[PATTERN_COUNT] = {
+        "1  RAMP  0 > 100 > 0",
+        "2  RANDOM  20 / 40 / 60 / 80 / 100",
+        "3  PULSE  100%  1s ON / 1s OFF",
+    };
+    for (int i = 0; i < PATTERN_COUNT; ++i) {
+        lv_obj_t *button = lv_button_create(card);
+        s_pattern_buttons[i] = button;
+        lv_obj_set_size(button, 376, 49);
+        lv_obj_set_pos(button, 8, 9 + i * 57);
+        lv_obj_set_style_radius(button, 16, 0);
+        lv_obj_set_style_bg_color(button, lv_color_hex(COLOR_CARD_2), 0);
+        lv_obj_add_event_cb(button, pattern_select_event, LV_EVENT_CLICKED,
+                            (void *)(uintptr_t)i);
+        lv_obj_t *label = make_label(button, titles[i],
+                                     &lv_font_montserrat_14, COLOR_TEXT);
+        lv_obj_center(label);
+    }
+
+    s_pattern_value = make_label(card, "0%", &lv_font_montserrat_22, COLOR_PINK);
+    lv_obj_align(s_pattern_value, LV_ALIGN_TOP_MID, 0, 185);
+
+    const char *motor_names[MOTOR_COUNT] = {"SUCTION", "VIBRATION", "ELECTRIC"};
+    for (int i = 0; i < MOTOR_COUNT; ++i) {
+        int x = -125 + i * 125;
+        lv_obj_t *label = make_label(card, motor_names[i],
+                                     &lv_font_montserrat_12, COLOR_TEXT);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, x, 213);
+        s_pattern_switches[i] = lv_switch_create(card);
+        lv_obj_set_size(s_pattern_switches[i], 56, 28);
+        lv_obj_align(s_pattern_switches[i], LV_ALIGN_TOP_MID, x, 233);
+        lv_obj_set_style_bg_color(s_pattern_switches[i],
+            lv_color_hex(COLOR_MAGENTA), LV_PART_INDICATOR | LV_STATE_CHECKED);
+        if (i == MOTOR_VIBRATION) {
+            lv_obj_add_state(s_pattern_switches[i], LV_STATE_CHECKED);
+        }
+        lv_obj_add_event_cb(s_pattern_switches[i], pattern_motor_event,
+                            LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)i);
+    }
+
+    lv_obj_t *start = make_small_button(card, "START", 150, pattern_start_event);
+    lv_obj_set_height(start, 46);
+    lv_obj_align(start, LV_ALIGN_BOTTOM_MID, 0, -3);
+    s_pattern_start_label = lv_obj_get_child(start, 0);
+    create_back_bar(s_pattern_view, 1);
+}
+
+static void update_setting_label(setting_id_t id, int32_t value)
+{
+    if (id < 0 || id >= SETTING_COUNT || s_setting_values[id] == NULL) {
+        return;
+    }
+    char text[12];
+    snprintf(text, sizeof(text), "%ld%%", (long)value);
+    lv_label_set_text(s_setting_values[id], text);
+}
+
+static void setting_slider_event(lv_event_t *event)
+{
+    setting_id_t id = (setting_id_t)(uintptr_t)lv_event_get_user_data(event);
+    lv_event_code_t code = lv_event_get_code(event);
+    lv_obj_t *slider = lv_event_get_target_obj(event);
+
+    if (code == LV_EVENT_RELEASED) {
+        app_settings_save();
+        return;
+    }
+    if (code != LV_EVENT_VALUE_CHANGED) {
+        return;
+    }
+
+    int32_t value = lv_slider_get_value(slider);
+    update_setting_label(id, value);
+    switch (id) {
+    case SETTING_BALL_SENSITIVITY:
+        app_settings_set_ball_sensitivity((uint16_t)value);
+        break;
+    case SETTING_BALL_LIMIT:
+        app_settings_set_ball_limit((uint8_t)value);
+        break;
+    case SETTING_MOTION_SENSITIVITY:
+        app_settings_set_motion_sensitivity((uint16_t)value);
+        break;
+    case SETTING_BRIGHTNESS:
+        app_settings_set_brightness((uint8_t)value);
+        bsp_display_brightness_set((int)value);
+        break;
+    default:
+        break;
+    }
+}
+
+static void create_setting_slider(lv_obj_t *parent, int y, setting_id_t id,
+                                  const char *title, int min, int max, int value)
+{
+    lv_obj_t *title_label = make_label(parent, title, &lv_font_montserrat_14,
+                                       COLOR_TEXT);
+    lv_obj_set_pos(title_label, 16, y + 3);
+
+    s_setting_values[id] = make_label(parent, "", &lv_font_montserrat_14,
+                                      COLOR_PINK);
+    lv_obj_set_pos(s_setting_values[id], 358, y + 3);
+    update_setting_label(id, value);
+
+    lv_obj_t *slider = lv_slider_create(parent);
+    lv_obj_set_size(slider, 386, 18);
+    lv_obj_set_pos(slider, 15, y + 30);
+    lv_slider_set_range(slider, min, max);
+    lv_slider_set_value(slider, value, LV_ANIM_OFF);
+    lv_obj_set_style_radius(slider, 9, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(COLOR_CARD_2), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(COLOR_MAGENTA), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_grad_color(slider, lv_color_hex(COLOR_PURPLE), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_grad_dir(slider, LV_GRAD_DIR_HOR, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(slider, 9, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(COLOR_PINK), LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider, 6, LV_PART_KNOB);
+    lv_obj_add_event_cb(slider, setting_slider_event, LV_EVENT_VALUE_CHANGED,
+                        (void *)(uintptr_t)id);
+    lv_obj_add_event_cb(slider, setting_slider_event, LV_EVENT_RELEASED,
+                        (void *)(uintptr_t)id);
+}
+
+static void create_settings_view(lv_obj_t *screen)
+{
+    app_settings_t settings;
+    app_settings_get(&settings);
+
+    s_settings_view = create_root_view(screen);
+
+    lv_obj_t *header = lv_obj_create(s_settings_view);
+    lv_obj_set_size(header, 440, 58);
+    lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 10);
+    set_bg(header, COLOR_CARD);
+    lv_obj_set_style_radius(header, 22, 0);
+    lv_obj_remove_flag(header, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *title = make_label(header, "SETTINGS", &lv_font_montserrat_22,
+                                 COLOR_TEXT);
+    lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, -8);
+    lv_obj_t *subtitle = make_label(header, "DEVICE CONFIG",
+                                    &lv_font_montserrat_12, COLOR_MUTED);
+    lv_obj_align(subtitle, LV_ALIGN_LEFT_MID, 12, 14);
+
+    lv_obj_t *card = lv_obj_create(s_settings_view);
+    lv_obj_set_size(card, 440, 346);
+    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 76);
+    set_bg(card, COLOR_CARD);
+    lv_obj_set_style_radius(card, 28, 0);
+    lv_obj_set_style_border_width(card, 2, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(COLOR_MAGENTA), 0);
+    lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    create_setting_slider(card, 0, SETTING_BALL_SENSITIVITY,
+                          "BALL SENSITIVITY", 50, 200, settings.ball_sensitivity);
+    create_setting_slider(card, 61, SETTING_BALL_LIMIT,
+                          "BALL OUTPUT LIMIT", 20, 100, settings.ball_limit);
+    create_setting_slider(card, 122, SETTING_MOTION_SENSITIVITY,
+                          "MOTION SENSITIVITY", 50, 200, settings.motion_sensitivity);
+    create_setting_slider(card, 183, SETTING_BRIGHTNESS,
+                          "DISPLAY BRIGHTNESS", 10, 100, settings.brightness);
+
+    lv_obj_t *battery_title = make_label(card, "BATTERY LEVEL",
+                                         &lv_font_montserrat_14, COLOR_TEXT);
+    lv_obj_set_pos(battery_title, 16, 252);
+    s_battery_label = make_label(card, "READING...", &lv_font_montserrat_14,
+                                 COLOR_MUTED);
+    lv_obj_set_pos(s_battery_label, 265, 252);
+
+    s_battery_bar = lv_bar_create(card);
+    lv_obj_set_size(s_battery_bar, 386, 24);
+    lv_obj_set_pos(s_battery_bar, 15, 286);
+    lv_bar_set_range(s_battery_bar, 0, 100);
+    lv_bar_set_value(s_battery_bar, 0, LV_ANIM_OFF);
+    lv_obj_set_style_radius(s_battery_bar, 12, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(COLOR_CARD_2), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_battery_bar, lv_color_hex(COLOR_GREEN), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(s_battery_bar, 12, LV_PART_INDICATOR);
+
+    create_back_bar(s_settings_view, 1);
 }
 
 static const char *state_text(ble_app_state_t state)
@@ -633,9 +931,9 @@ static void ui_timer_cb(lv_timer_t *timer)
 
     imu_game_snapshot_t game;
     imu_game_get_snapshot(&game);
-    lv_obj_set_pos(s_game_ball,
-                   128 + (int)(game.ball_x * 108.0f),
-                   85 + (int)(game.ball_y * 66.0f));
+    lv_obj_align(s_game_ball, LV_ALIGN_CENTER,
+                 (int)(game.ball_x * 108.0f),
+                 (int)(game.ball_y * 66.0f));
     char value[8];
     snprintf(value, sizeof(value), "%u", game.intensity);
     lv_label_set_text(s_game_value, value);
@@ -662,6 +960,39 @@ static void ui_timer_cb(lv_timer_t *timer)
                         "STILL - NO REPEATED COMMANDS");
     lv_obj_set_style_text_color(s_motion_state,
         lv_color_hex(motion.moving ? COLOR_GREEN : COLOR_MUTED), 0);
+
+    pattern_snapshot_t pattern;
+    pattern_control_get_snapshot(&pattern);
+    char pattern_value[12];
+    snprintf(pattern_value, sizeof(pattern_value), "%u%%", pattern.intensity);
+    lv_label_set_text(s_pattern_value, pattern_value);
+    lv_label_set_text(s_pattern_start_label, pattern.running ? "STOP" : "START");
+    for (int i = 0; i < PATTERN_COUNT; ++i) {
+        lv_obj_set_style_bg_color(s_pattern_buttons[i],
+            lv_color_hex(i == pattern.selected ? COLOR_MAGENTA : COLOR_CARD_2), 0);
+    }
+
+    power_status_snapshot_t power;
+    power_status_get(&power);
+    char battery[32];
+    if (!power.available) {
+        snprintf(battery, sizeof(battery), "UNAVAILABLE");
+        lv_bar_set_value(s_battery_bar, 0, LV_ANIM_OFF);
+        lv_obj_set_style_text_color(s_battery_label,
+                                    lv_color_hex(COLOR_MUTED), 0);
+    } else if (!power.battery_connected) {
+        snprintf(battery, sizeof(battery), "NO BATTERY");
+        lv_bar_set_value(s_battery_bar, 0, LV_ANIM_OFF);
+        lv_obj_set_style_text_color(s_battery_label,
+                                    lv_color_hex(COLOR_MUTED), 0);
+    } else {
+        snprintf(battery, sizeof(battery), "%u%%  %s", power.percent,
+                 power.charging ? "CHARGING" : "BATTERY");
+        lv_bar_set_value(s_battery_bar, power.percent, LV_ANIM_OFF);
+        lv_obj_set_style_text_color(s_battery_label,
+                                    lv_color_hex(COLOR_GREEN), 0);
+    }
+    lv_label_set_text(s_battery_label, battery);
 }
 
 void app_ui_create(void)
@@ -674,6 +1005,8 @@ void app_ui_create(void)
     create_control_view(screen);
     create_game_view(screen);
     create_motion_view(screen);
+    create_settings_view(screen);
+    create_pattern_view(screen);
 
     show_view(s_home_view);
     lv_timer_create(ui_timer_cb, 80, NULL);

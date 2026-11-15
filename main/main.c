@@ -1,5 +1,8 @@
+#include "app_settings.h"
 #include "ble_client.h"
 #include "imu_game.h"
+#include "power_status.h"
+#include "pattern_control.h"
 #include "ui.h"
 
 #include "esp_err.h"
@@ -18,12 +21,21 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+    app_settings_init();
 
     if (bsp_display_start() == NULL) {
         ESP_LOGE(TAG, "Display initialization failed");
         return;
     }
     bsp_display_backlight_on();
+    app_settings_t settings;
+    app_settings_get(&settings);
+    ESP_ERROR_CHECK(bsp_display_brightness_set(settings.brightness));
+
+    ret = power_status_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Battery monitor unavailable: %s", esp_err_to_name(ret));
+    }
 
     ESP_ERROR_CHECK(bsp_display_lock(-1));
     app_ui_create();
@@ -31,5 +43,6 @@ void app_main(void)
 
     imu_game_init();
     ble_client_init();
+    pattern_control_init();
     ESP_LOGI(TAG, "SOSEXY remote started");
 }
