@@ -27,19 +27,20 @@ void app_main(void)
         ESP_LOGE(TAG, "Display initialization failed");
         return;
     }
-    bsp_display_backlight_on();
-    app_settings_t settings;
-    app_settings_get(&settings);
-    ESP_ERROR_CHECK(bsp_display_brightness_set(settings.brightness));
-
     ret = power_status_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Battery monitor unavailable: %s", esp_err_to_name(ret));
     }
 
+    ESP_LOGI(TAG, "Creating user interface");
     ESP_ERROR_CHECK(bsp_display_lock(-1));
+    /* Serialize LCD commands with the adapter's SPI display refreshes. */
+    app_settings_t settings;
+    app_settings_get(&settings);
+    ESP_ERROR_CHECK(bsp_display_brightness_set(settings.brightness));
     app_ui_create();
     bsp_display_unlock();
+    ESP_LOGI(TAG, "User interface ready");
 
     imu_game_init();
     ble_client_init();

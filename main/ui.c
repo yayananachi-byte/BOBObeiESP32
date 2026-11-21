@@ -12,6 +12,7 @@
 #include "lvgl.h"
 #include "power_status.h"
 #include "pattern_control.h"
+#include "fonts/ui_fonts.h"
 
 #define COLOR_BG       0x12000F
 #define COLOR_CARD     0x2A0828
@@ -79,7 +80,7 @@ static bool s_back_drag_active;
 
 static const lv_font_t *cjk_font(void)
 {
-    return &lv_font_source_han_sans_sc_16_cjk;
+    return &ui_font_22;
 }
 
 static void set_bg(lv_obj_t *obj, uint32_t color)
@@ -198,23 +199,25 @@ static lv_obj_t *create_header(lv_obj_t *page, const char *title,
     lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 10);
     set_bg(header, COLOR_CARD);
     lv_obj_set_style_radius(header, 22, 0);
-    lv_obj_set_style_pad_all(header, 12, 0);
+    lv_obj_set_style_pad_all(header, 0, 0);
     lv_obj_remove_flag(header, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *title_label = make_label(header, title, title_font, COLOR_TEXT);
-    lv_obj_align(title_label, LV_ALIGN_LEFT_MID, 4, -7);
+    lv_obj_align(title_label, LV_ALIGN_LEFT_MID, 16, -10);
 
-    s_status_labels[status_index] = make_label(header, "BLE STARTING",
-                                               &lv_font_montserrat_12, COLOR_MUTED);
-    lv_obj_align(s_status_labels[status_index], LV_ALIGN_LEFT_MID, 5, 15);
+    s_status_labels[status_index] = make_label(header, "蓝牙初始化",
+                                               &ui_font_16, COLOR_MUTED);
+    lv_obj_set_width(s_status_labels[status_index], 306);
+    lv_label_set_long_mode(s_status_labels[status_index], LV_LABEL_LONG_DOT);
+    lv_obj_align(s_status_labels[status_index], LV_ALIGN_LEFT_MID, 16, 14);
 
     lv_obj_t *stop = lv_button_create(header);
     lv_obj_set_size(stop, 86, 38);
-    lv_obj_align(stop, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_align(stop, LV_ALIGN_RIGHT_MID, -12, 0);
     lv_obj_set_style_radius(stop, 19, 0);
     lv_obj_set_style_bg_color(stop, lv_color_hex(COLOR_RED), 0);
     lv_obj_add_event_cb(stop, stop_event, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *stop_label = make_label(stop, "STOP", &lv_font_montserrat_16, 0xFFFFFF);
+    lv_obj_t *stop_label = make_label(stop, "停止", &ui_font_16, 0xFFFFFF);
     lv_obj_center(stop_label);
     return header;
 }
@@ -238,9 +241,9 @@ static void create_back_bar(lv_obj_t *page, int home_page)
                         (void *)(uintptr_t)home_page);
 
     lv_obj_t *label = make_label(bar,
-                                 home_page == 0 ? "^  SWIPE UP  -  HOME" :
-                                                  "^  SWIPE UP  -  MENU",
-                                 &lv_font_montserrat_12, COLOR_TEXT);
+                                 home_page == 0 ? "上滑返回首页" :
+                                                  "上滑返回菜单",
+                                 &ui_font_16, COLOR_TEXT);
     lv_obj_center(label);
 }
 
@@ -255,50 +258,54 @@ static lv_obj_t *create_root_view(lv_obj_t *screen)
     return view;
 }
 
-static lv_obj_t *create_home_button(lv_obj_t *parent, int x, int y,
+static lv_obj_t *create_home_button(lv_obj_t *parent, int column, int row,
                                     const char *title, const char *subtitle,
                                     const lv_font_t *title_font, home_action_t action)
 {
     lv_obj_t *button = lv_button_create(parent);
-    lv_obj_set_size(button, 174, 140);
-    lv_obj_set_pos(button, x, y);
-    lv_obj_set_style_radius(button, 28, 0);
+    lv_obj_set_grid_cell(button, LV_GRID_ALIGN_STRETCH, column, 1,
+                        LV_GRID_ALIGN_STRETCH, row, 1);
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_radius(button, 24, 0);
     lv_obj_set_style_bg_color(button, lv_color_hex(COLOR_CARD_2), 0);
     lv_obj_set_style_bg_grad_color(button, lv_color_hex(COLOR_CARD), 0);
     lv_obj_set_style_bg_grad_dir(button, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_border_width(button, 3, 0);
     lv_obj_set_style_border_color(button, lv_color_hex(COLOR_MAGENTA), 0);
-    lv_obj_set_style_shadow_width(button, 18, 0);
+    lv_obj_set_style_shadow_width(button, 0, 0);
     lv_obj_set_style_shadow_color(button, lv_color_hex(COLOR_MAGENTA), 0);
     lv_obj_add_event_cb(button, home_button_event, LV_EVENT_CLICKED,
                         (void *)(uintptr_t)action);
 
     lv_obj_t *title_label = make_label(button, title, title_font, COLOR_TEXT);
     lv_obj_align(title_label, LV_ALIGN_CENTER, 0, -12);
-    lv_obj_t *subtitle_label = make_label(button, subtitle, &lv_font_montserrat_12, COLOR_MUTED);
+    lv_obj_t *subtitle_label = make_label(button, subtitle, &ui_font_16, COLOR_MUTED);
     lv_obj_align(subtitle_label, LV_ALIGN_CENTER, 0, 18);
 
     return button;
 }
 
-static lv_obj_t *create_home_frame(lv_obj_t *page, const char *title,
-                                   const lv_font_t *title_font)
+static lv_obj_t *create_home_frame(lv_obj_t *page)
 {
+    static const int32_t columns[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    static const int32_t rows[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     set_bg(page, COLOR_BG);
     lv_obj_set_style_pad_all(page, 0, 0);
     lv_obj_t *frame = lv_obj_create(page);
-    lv_obj_set_size(frame, 440, 440);
-    lv_obj_center(frame);
+    lv_obj_set_size(frame, 432, 432);
+    lv_obj_align(frame, LV_ALIGN_TOP_MID, 0, 12);
     set_bg(frame, COLOR_CARD);
-    lv_obj_set_style_radius(frame, 36, 0);
-    lv_obj_set_style_border_width(frame, 3, 0);
+    lv_obj_set_style_pad_all(frame, 24, 0);
+    lv_obj_set_style_pad_row(frame, 20, 0);
+    lv_obj_set_style_pad_column(frame, 20, 0);
+    lv_obj_set_grid_dsc_array(frame, columns, rows);
+    lv_obj_set_style_radius(frame, 30, 0);
+    lv_obj_set_style_border_width(frame, 2, 0);
     lv_obj_set_style_border_color(frame, lv_color_hex(COLOR_MAGENTA), 0);
-    lv_obj_set_style_shadow_width(frame, 24, 0);
+    lv_obj_set_style_shadow_width(frame, 0, 0);
     lv_obj_set_style_shadow_color(frame, lv_color_hex(COLOR_PURPLE), 0);
     lv_obj_remove_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *brand = make_label(frame, title, title_font, COLOR_PINK);
-    lv_obj_align(brand, LV_ALIGN_TOP_MID, 0, 13);
     return frame;
 }
 
@@ -309,36 +316,35 @@ static void create_home_view(lv_obj_t *screen)
     lv_obj_set_size(s_home_tileview, lv_pct(100), lv_pct(100));
     set_bg(s_home_tileview, COLOR_BG);
     lv_obj_set_style_pad_all(s_home_tileview, 0, 0);
+    lv_obj_set_scrollbar_mode(s_home_tileview, LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(s_home_tileview, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
     lv_obj_t *main_page = lv_tileview_add_tile(s_home_tileview, 0, 0, LV_DIR_RIGHT);
     lv_obj_t *more_page = lv_tileview_add_tile(s_home_tileview, 1, 0, LV_DIR_LEFT);
 
-    lv_obj_t *frame = create_home_frame(main_page, "SOSEXY REMOTE",
-                                        &lv_font_montserrat_22);
+    lv_obj_t *frame = create_home_frame(main_page);
 
-    create_home_button(frame, 30, 70, "控制", "CONTROL", cjk_font(), HOME_CONTROL);
-    create_home_button(frame, 236, 70, "BLE", "BLUETOOTH", &lv_font_montserrat_22, HOME_BLE);
-    create_home_button(frame, 30, 232, "小球", "BALANCE", cjk_font(), HOME_GAME);
-    create_home_button(frame, 236, 232, "体感", "MOTION", cjk_font(), HOME_MOTION);
+    create_home_button(frame, 0, 0, "强度控制", "独立调节三路强度", cjk_font(), HOME_CONTROL);
+    create_home_button(frame, 1, 0, "蓝牙连接", "扫描与选择设备", cjk_font(), HOME_BLE);
+    create_home_button(frame, 0, 1, "平衡小球", "倾斜控制强度", cjk_font(), HOME_GAME);
+    create_home_button(frame, 1, 1, "体感控制", "运动控制强度", cjk_font(), HOME_MOTION);
 
-    lv_obj_t *hint = make_label(frame, "Tap a card  |  SWIPE LEFT FOR MORE",
-                                &lv_font_montserrat_12, COLOR_MUTED);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_t *hint = make_label(main_page, "向左滑动，更多功能  1/2",
+                                &ui_font_16, COLOR_MUTED);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 
-    lv_obj_t *more_frame = create_home_frame(more_page, "MORE FEATURES",
-                                             &lv_font_montserrat_22);
-    create_home_button(more_frame, 30, 70, "SETTINGS", "DEVICE CONFIG",
-                       &lv_font_montserrat_22, HOME_SETTINGS);
-    create_home_button(more_frame, 236, 70, "PATTERNS", "VIBRATION",
-                       &lv_font_montserrat_22, HOME_PATTERN);
-    create_home_button(more_frame, 30, 232, "PENDING", "COMING SOON",
-                       &lv_font_montserrat_22, HOME_PENDING);
-    create_home_button(more_frame, 236, 232, "PENDING", "COMING SOON",
-                       &lv_font_montserrat_22, HOME_PENDING);
-    lv_obj_t *more_hint = make_label(more_frame, "SWIPE RIGHT FOR HOME",
-                                     &lv_font_montserrat_12, COLOR_MUTED);
-    lv_obj_align(more_hint, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_t *more_frame = create_home_frame(more_page);
+    create_home_button(more_frame, 0, 0, "系统设置", "灵敏度与屏幕电量",
+                       &ui_font_22, HOME_SETTINGS);
+    create_home_button(more_frame, 1, 0, "震动模式", "渐强、随机与间歇",
+                       &ui_font_22, HOME_PATTERN);
+    create_home_button(more_frame, 0, 1, "待开发", "敬请期待",
+                       &ui_font_22, HOME_PENDING);
+    create_home_button(more_frame, 1, 1, "待开发", "敬请期待",
+                       &ui_font_22, HOME_PENDING);
+    lv_obj_t *more_hint = make_label(more_page, "向右滑动，返回首页  2/2",
+                                     &ui_font_16, COLOR_MUTED);
+    lv_obj_align(more_hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
 static void slider_event(lv_event_t *event)
@@ -362,43 +368,51 @@ static void create_slider_page(lv_obj_t *page, motor_id_t motor,
     create_header(page, title, title_font, status_index);
 
     lv_obj_t *card = lv_obj_create(page);
-    lv_obj_set_size(card, 330, 325);
+    lv_obj_set_size(card, 400, 348);
     lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 78);
     set_bg(card, COLOR_CARD);
-    lv_obj_set_style_radius(card, 34, 0);
+    lv_obj_set_style_pad_all(card, 0, 0);
+    lv_obj_set_style_radius(card, 20, 0);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_MAGENTA), 0);
     lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *caption = make_label(card, "INTENSITY  0 - 100",
-                                   &lv_font_montserrat_14, COLOR_MUTED);
-    lv_obj_align(caption, LV_ALIGN_TOP_MID, 0, 6);
-
     lv_obj_t *slider = lv_slider_create(card);
-    lv_obj_set_size(slider, 108, 238);
-    lv_obj_align(slider, LV_ALIGN_BOTTOM_LEFT, 40, -18);
+    lv_obj_set_size(slider, 200, 268);
+    lv_obj_align(slider, LV_ALIGN_TOP_MID, 0, 16);
+    lv_slider_set_orientation(slider, LV_SLIDER_ORIENTATION_VERTICAL);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(slider, lv_color_hex(COLOR_CARD_2), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(slider, 50, LV_PART_MAIN);
+    lv_obj_set_style_radius(slider, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(slider, 0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(slider, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(slider, lv_color_hex(COLOR_PINK), LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(slider, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(slider, lv_color_hex(COLOR_MAGENTA), LV_PART_INDICATOR);
     lv_obj_set_style_bg_grad_color(slider, lv_color_hex(COLOR_PURPLE), LV_PART_INDICATOR);
     lv_obj_set_style_bg_grad_dir(slider, LV_GRAD_DIR_VER, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(slider, 50, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(COLOR_PINK), LV_PART_KNOB);
-    lv_obj_set_style_pad_all(slider, 10, LV_PART_KNOB);
-    lv_obj_set_style_shadow_width(slider, 22, LV_PART_KNOB);
-    lv_obj_set_style_shadow_color(slider, lv_color_hex(COLOR_MAGENTA), LV_PART_KNOB);
+    lv_obj_set_style_radius(slider, 6, LV_PART_INDICATOR);
+    lv_obj_set_style_opa(slider, LV_OPA_TRANSP, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_shadow_width(slider, 0, LV_PART_KNOB);
+    lv_obj_remove_flag(slider, LV_OBJ_FLAG_ADV_HITTEST);
     lv_obj_add_event_cb(slider, slider_event, LV_EVENT_VALUE_CHANGED,
                         (void *)(uintptr_t)motor);
 
-    s_slider_labels[motor] = make_label(card, "0%", &lv_font_montserrat_40, COLOR_TEXT);
-    lv_obj_align(s_slider_labels[motor], LV_ALIGN_RIGHT_MID, -28, 10);
+    s_slider_labels[motor] = make_label(slider, "0%", &lv_font_montserrat_40, COLOR_TEXT);
+    lv_obj_center(s_slider_labels[motor]);
+    lv_obj_remove_flag(s_slider_labels[motor], LV_OBJ_FLAG_CLICKABLE);
 
-    lv_obj_t *swipe = make_label(card, "<  SWIPE  >",
-                                 &lv_font_montserrat_12, COLOR_MUTED);
-    lv_obj_align(swipe, LV_ALIGN_BOTTOM_RIGHT, -24, -30);
+    lv_obj_t *maximum = make_label(card, "100", &ui_font_16, COLOR_MUTED);
+    lv_obj_align(maximum, LV_ALIGN_TOP_MID, 132, 16);
+    lv_obj_t *minimum = make_label(card, "0", &ui_font_16, COLOR_MUTED);
+    lv_obj_align(minimum, LV_ALIGN_TOP_MID, 116, 264);
+
+    lv_obj_t *swipe = make_label(card, "上下调节强度 · 左右切换功能",
+                                 &ui_font_16, COLOR_MUTED);
+    lv_obj_align(swipe, LV_ALIGN_BOTTOM_MID, 0, -18);
 
     create_back_bar(page, 0);
 }
@@ -415,8 +429,8 @@ static void rebuild_device_list(void)
     lv_obj_clean(s_device_list);
 
     if (count == 0) {
-        lv_obj_t *empty = make_label(s_device_list, "Scanning for BLE devices...",
-                                     &lv_font_montserrat_16, COLOR_MUTED);
+        lv_obj_t *empty = make_label(s_device_list, "正在搜索蓝牙设备...",
+                                     &ui_font_16, COLOR_MUTED);
         lv_obj_center(empty);
         return;
     }
@@ -431,10 +445,10 @@ static void rebuild_device_list(void)
         lv_obj_add_event_cb(row, connect_event, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
 
         char line[80];
-        snprintf(line, sizeof(line), "%s\n%s   %d dBm",
-                 results[i].name[0] ? results[i].name : "Unnamed",
+        snprintf(line, sizeof(line), "%s\n%s   信号 %d",
+                 results[i].name[0] ? results[i].name : "未命名设备",
                  results[i].address, results[i].rssi);
-        lv_obj_t *label = make_label(row, line, &lv_font_montserrat_14, COLOR_TEXT);
+        lv_obj_t *label = make_label(row, line, &ui_font_16, COLOR_TEXT);
         lv_obj_align(label, LV_ALIGN_LEFT_MID, 2, 0);
     }
 }
@@ -442,7 +456,7 @@ static void rebuild_device_list(void)
 static void create_ble_view(lv_obj_t *screen)
 {
     s_ble_view = create_root_view(screen);
-    create_header(s_ble_view, "BLUETOOTH", &lv_font_montserrat_22, 0);
+    create_header(s_ble_view, "蓝牙连接", &ui_font_22, 0);
 
     lv_obj_t *scan = lv_button_create(s_ble_view);
     lv_obj_set_size(scan, 160, 48);
@@ -450,7 +464,7 @@ static void create_ble_view(lv_obj_t *screen)
     lv_obj_set_style_bg_color(scan, lv_color_hex(COLOR_PURPLE), 0);
     lv_obj_set_style_radius(scan, 24, 0);
     lv_obj_add_event_cb(scan, scan_event, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *scan_label = make_label(scan, "SCAN AGAIN", &lv_font_montserrat_16, 0xFFFFFF);
+    lv_obj_t *scan_label = make_label(scan, "重新扫描", &ui_font_16, 0xFFFFFF);
     lv_obj_center(scan_label);
 
     s_device_list = lv_obj_create(s_ble_view);
@@ -471,6 +485,7 @@ static void create_control_view(lv_obj_t *screen)
     lv_obj_set_size(s_control_tileview, lv_pct(100), lv_pct(100));
     set_bg(s_control_tileview, COLOR_BG);
     lv_obj_set_style_pad_all(s_control_tileview, 0, 0);
+    lv_obj_set_scrollbar_mode(s_control_tileview, LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(s_control_tileview, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
     lv_obj_t *suction = lv_tileview_add_tile(s_control_tileview, 0, 0, LV_DIR_RIGHT);
@@ -478,7 +493,7 @@ static void create_control_view(lv_obj_t *screen)
                                                LV_DIR_LEFT | LV_DIR_RIGHT);
     lv_obj_t *electric = lv_tileview_add_tile(s_control_tileview, 2, 0, LV_DIR_LEFT);
 
-    create_slider_page(suction, MOTOR_SUCTION, "SUCTION", &lv_font_montserrat_22, 1);
+    create_slider_page(suction, MOTOR_SUCTION, "吮吸", &ui_font_22, 1);
     create_slider_page(vibration, MOTOR_VIBRATION, "震动", cjk_font(), 2);
     create_slider_page(electric, MOTOR_ELECTRIC, "电流", cjk_font(), 3);
 }
@@ -522,7 +537,7 @@ static lv_obj_t *make_small_button(lv_obj_t *parent, const char *text, int width
     lv_obj_set_style_radius(button, 20, 0);
     lv_obj_set_style_bg_color(button, lv_color_hex(COLOR_PURPLE), 0);
     lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *label = make_label(button, text, &lv_font_montserrat_14, 0xFFFFFF);
+    lv_obj_t *label = make_label(button, text, &ui_font_22, 0xFFFFFF);
     lv_obj_center(label);
     return button;
 }
@@ -530,12 +545,13 @@ static lv_obj_t *make_small_button(lv_obj_t *parent, const char *text, int width
 static void create_game_view(lv_obj_t *screen)
 {
     s_game_view = create_root_view(screen);
-    create_header(s_game_view, "BALANCE BALL", &lv_font_montserrat_22, 4);
+    create_header(s_game_view, "平衡小球", &ui_font_22, 4);
 
     lv_obj_t *arena = lv_obj_create(s_game_view);
     lv_obj_set_size(arena, 300, 215);
     lv_obj_align(arena, LV_ALIGN_TOP_MID, 0, 76);
     set_bg(arena, COLOR_CARD);
+    lv_obj_set_style_pad_all(arena, 0, 0);
     lv_obj_set_style_radius(arena, 38, 0);
     lv_obj_set_style_border_width(arena, 3, 0);
     lv_obj_set_style_border_color(arena, lv_color_hex(COLOR_MAGENTA), 0);
@@ -560,25 +576,26 @@ static void create_game_view(lv_obj_t *screen)
 
     s_game_value = make_label(arena, "0", &lv_font_montserrat_40, COLOR_TEXT);
     lv_obj_align(s_game_value, LV_ALIGN_TOP_RIGHT, -16, 8);
-    s_game_hint = make_label(arena, "Press BOOT to reset center",
-                             &lv_font_montserrat_12, COLOR_MUTED);
+    s_game_hint = make_label(arena, "按启动键重置中心",
+                             &ui_font_16, COLOR_MUTED);
     lv_obj_align(s_game_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
 
     lv_obj_t *controls = lv_obj_create(s_game_view);
     lv_obj_set_size(controls, 440, 124);
     lv_obj_align(controls, LV_ALIGN_TOP_MID, 0, 302);
     set_bg(controls, COLOR_CARD);
+    lv_obj_set_style_pad_all(controls, 0, 0);
     lv_obj_set_style_radius(controls, 28, 0);
     lv_obj_remove_flag(controls, LV_OBJ_FLAG_SCROLLABLE);
 
-    const char *names[MOTOR_COUNT] = {"S", "V", "E"};
+    const char *names[MOTOR_COUNT] = {"吮吸", "震动", "电流"};
     for (int i = 0; i < MOTOR_COUNT; ++i) {
-        int x = -128 + i * 82;
-        lv_obj_t *label = make_label(controls, names[i], &lv_font_montserrat_14, COLOR_TEXT);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, x, -2);
+        int x = -132 + i * 132;
+        lv_obj_t *label = make_label(controls, names[i], &ui_font_16, COLOR_TEXT);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, x, 10);
         s_game_switches[i] = lv_switch_create(controls);
         lv_obj_set_size(s_game_switches[i], 54, 28);
-        lv_obj_align(s_game_switches[i], LV_ALIGN_TOP_MID, x, 20);
+        lv_obj_align(s_game_switches[i], LV_ALIGN_TOP_MID, x, 34);
         lv_obj_set_style_bg_color(s_game_switches[i], lv_color_hex(COLOR_MAGENTA),
                                   LV_PART_INDICATOR | LV_STATE_CHECKED);
         if (i != MOTOR_ELECTRIC) {
@@ -588,10 +605,10 @@ static void create_game_view(lv_obj_t *screen)
                             LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)i);
     }
 
-    lv_obj_t *start = make_small_button(controls, "START", 112, game_start_event);
+    lv_obj_t *start = make_small_button(controls, "启动", 112, game_start_event);
     lv_obj_align(start, LV_ALIGN_BOTTOM_RIGHT, -8, -6);
     s_game_start_label = lv_obj_get_child(start, 0);
-    lv_obj_t *reset = make_small_button(controls, "CENTER", 104, game_reset_event);
+    lv_obj_t *reset = make_small_button(controls, "归中", 104, game_reset_event);
     lv_obj_align(reset, LV_ALIGN_BOTTOM_LEFT, 8, -6);
     create_back_bar(s_game_view, 0);
 }
@@ -614,26 +631,27 @@ static void motion_motor_event(lv_event_t *event)
 static void create_motion_view(lv_obj_t *screen)
 {
     s_motion_view = create_root_view(screen);
-    create_header(s_motion_view, "MOTION CONTROL", &lv_font_montserrat_22, 5);
+    create_header(s_motion_view, "体感控制", &ui_font_22, 5);
 
     lv_obj_t *card = lv_obj_create(s_motion_view);
     lv_obj_set_size(card, 400, 340);
     lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 80);
     set_bg(card, COLOR_CARD);
+    lv_obj_set_style_pad_all(card, 0, 0);
     lv_obj_set_style_radius(card, 34, 0);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_MAGENTA), 0);
     lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *caption = make_label(card, "MOVE FASTER  =  STRONGER OUTPUT",
-                                   &lv_font_montserrat_12, COLOR_MUTED);
-    lv_obj_align(caption, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_t *caption = make_label(card, "运动越快，强度越大",
+                                   &ui_font_16, COLOR_MUTED);
+    lv_obj_align(caption, LV_ALIGN_TOP_MID, 0, 12);
 
     s_motion_value = make_label(card, "0%", &lv_font_montserrat_40, COLOR_TEXT);
     lv_obj_align(s_motion_value, LV_ALIGN_TOP_MID, 0, 42);
 
-    s_motion_accel = make_label(card, "LINEAR ACCEL  0.00 m/s2",
-                                &lv_font_montserrat_14, COLOR_MUTED);
+    s_motion_accel = make_label(card, "加速度 0.00 米/秒²",
+                                &ui_font_16, COLOR_MUTED);
     lv_obj_align(s_motion_accel, LV_ALIGN_TOP_MID, 0, 96);
 
     s_motion_bar = lv_bar_create(card);
@@ -643,19 +661,20 @@ static void create_motion_view(lv_obj_t *screen)
     lv_bar_set_value(s_motion_bar, 0, LV_ANIM_OFF);
     lv_obj_set_style_radius(s_motion_bar, 24, LV_PART_MAIN);
     lv_obj_set_style_bg_color(s_motion_bar, lv_color_hex(COLOR_CARD_2), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_motion_bar, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(s_motion_bar, lv_color_hex(COLOR_MAGENTA), LV_PART_INDICATOR);
     lv_obj_set_style_bg_grad_color(s_motion_bar, lv_color_hex(COLOR_PURPLE), LV_PART_INDICATOR);
     lv_obj_set_style_bg_grad_dir(s_motion_bar, LV_GRAD_DIR_HOR, LV_PART_INDICATOR);
     lv_obj_set_style_radius(s_motion_bar, 24, LV_PART_INDICATOR);
 
-    s_motion_state = make_label(card, "STOPPED", &lv_font_montserrat_16, COLOR_MUTED);
+    s_motion_state = make_label(card, "已停止", &ui_font_16, COLOR_MUTED);
     lv_obj_align(s_motion_state, LV_ALIGN_TOP_MID, 0, 188);
 
-    const char *motion_names[MOTOR_COUNT] = {"S", "V", "E"};
+    const char *motion_names[MOTOR_COUNT] = {"吮吸", "震动", "电流"};
     for (int i = 0; i < MOTOR_COUNT; ++i) {
         int x = -108 + i * 108;
         lv_obj_t *label = make_label(card, motion_names[i],
-                                     &lv_font_montserrat_14, COLOR_TEXT);
+                                     &ui_font_16, COLOR_TEXT);
         lv_obj_align(label, LV_ALIGN_TOP_MID, x, 216);
         s_motion_switches[i] = lv_switch_create(card);
         lv_obj_set_size(s_motion_switches[i], 56, 28);
@@ -669,7 +688,7 @@ static void create_motion_view(lv_obj_t *screen)
                             LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)i);
     }
 
-    lv_obj_t *start = make_small_button(card, "START", 150, motion_start_event);
+    lv_obj_t *start = make_small_button(card, "启动", 150, motion_start_event);
     lv_obj_set_height(start, 48);
     lv_obj_align(start, LV_ALIGN_BOTTOM_MID, 0, -10);
     s_motion_start_label = lv_obj_get_child(start, 0);
@@ -705,45 +724,46 @@ static void pattern_motor_event(lv_event_t *event)
 static void create_pattern_view(lv_obj_t *screen)
 {
     s_pattern_view = create_root_view(screen);
-    create_header(s_pattern_view, "VIBRATION PATTERNS",
-                  &lv_font_montserrat_22, 6);
+    create_header(s_pattern_view, "震动模式",
+                  &ui_font_22, 6);
 
     lv_obj_t *card = lv_obj_create(s_pattern_view);
     lv_obj_set_size(card, 420, 340);
     lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 80);
     set_bg(card, COLOR_CARD);
+    lv_obj_set_style_pad_all(card, 0, 0);
     lv_obj_set_style_radius(card, 28, 0);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_MAGENTA), 0);
     lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
     const char *titles[PATTERN_COUNT] = {
-        "1  RAMP  0 > 100 > 0",
-        "2  RANDOM  20 / 40 / 60 / 80 / 100",
-        "3  PULSE  100%  1s ON / 1s OFF",
+        "1  渐强循环  0 → 100 → 0",
+        "2  随机强度  每 5 秒切换",
+        "3  间歇震动  开 1 秒 / 停 1 秒",
     };
     for (int i = 0; i < PATTERN_COUNT; ++i) {
         lv_obj_t *button = lv_button_create(card);
         s_pattern_buttons[i] = button;
         lv_obj_set_size(button, 376, 49);
-        lv_obj_set_pos(button, 8, 9 + i * 57);
+        lv_obj_align(button, LV_ALIGN_TOP_MID, 0, 12 + i * 57);
         lv_obj_set_style_radius(button, 16, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(COLOR_CARD_2), 0);
         lv_obj_add_event_cb(button, pattern_select_event, LV_EVENT_CLICKED,
                             (void *)(uintptr_t)i);
         lv_obj_t *label = make_label(button, titles[i],
-                                     &lv_font_montserrat_14, COLOR_TEXT);
+                                     &ui_font_16, COLOR_TEXT);
         lv_obj_center(label);
     }
 
-    s_pattern_value = make_label(card, "0%", &lv_font_montserrat_22, COLOR_PINK);
+    s_pattern_value = make_label(card, "0%", &ui_font_22, COLOR_PINK);
     lv_obj_align(s_pattern_value, LV_ALIGN_TOP_MID, 0, 185);
 
-    const char *motor_names[MOTOR_COUNT] = {"SUCTION", "VIBRATION", "ELECTRIC"};
+    const char *motor_names[MOTOR_COUNT] = {"吮吸", "震动", "电流"};
     for (int i = 0; i < MOTOR_COUNT; ++i) {
         int x = -125 + i * 125;
         lv_obj_t *label = make_label(card, motor_names[i],
-                                     &lv_font_montserrat_12, COLOR_TEXT);
+                                     &ui_font_16, COLOR_TEXT);
         lv_obj_align(label, LV_ALIGN_TOP_MID, x, 213);
         s_pattern_switches[i] = lv_switch_create(card);
         lv_obj_set_size(s_pattern_switches[i], 56, 28);
@@ -757,7 +777,7 @@ static void create_pattern_view(lv_obj_t *screen)
                             LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)i);
     }
 
-    lv_obj_t *start = make_small_button(card, "START", 150, pattern_start_event);
+    lv_obj_t *start = make_small_button(card, "启动", 150, pattern_start_event);
     lv_obj_set_height(start, 46);
     lv_obj_align(start, LV_ALIGN_BOTTOM_MID, 0, -3);
     s_pattern_start_label = lv_obj_get_child(start, 0);
@@ -812,18 +832,18 @@ static void setting_slider_event(lv_event_t *event)
 static void create_setting_slider(lv_obj_t *parent, int y, setting_id_t id,
                                   const char *title, int min, int max, int value)
 {
-    lv_obj_t *title_label = make_label(parent, title, &lv_font_montserrat_14,
+    lv_obj_t *title_label = make_label(parent, title, &ui_font_16,
                                        COLOR_TEXT);
-    lv_obj_set_pos(title_label, 16, y + 3);
+    lv_obj_set_pos(title_label, 20, y + 3);
 
-    s_setting_values[id] = make_label(parent, "", &lv_font_montserrat_14,
+    s_setting_values[id] = make_label(parent, "", &ui_font_16,
                                       COLOR_PINK);
-    lv_obj_set_pos(s_setting_values[id], 358, y + 3);
+    lv_obj_align(s_setting_values[id], LV_ALIGN_TOP_RIGHT, -20, y + 3);
     update_setting_label(id, value);
 
     lv_obj_t *slider = lv_slider_create(parent);
-    lv_obj_set_size(slider, 386, 18);
-    lv_obj_set_pos(slider, 15, y + 30);
+    lv_obj_set_size(slider, 396, 18);
+    lv_obj_set_pos(slider, 20, y + 30);
     lv_slider_set_range(slider, min, max);
     lv_slider_set_value(slider, value, LV_ANIM_OFF);
     lv_obj_set_style_radius(slider, 9, LV_PART_MAIN);
@@ -851,43 +871,45 @@ static void create_settings_view(lv_obj_t *screen)
     lv_obj_set_size(header, 440, 58);
     lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 10);
     set_bg(header, COLOR_CARD);
+    lv_obj_set_style_pad_all(header, 0, 0);
     lv_obj_set_style_radius(header, 22, 0);
     lv_obj_remove_flag(header, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *title = make_label(header, "SETTINGS", &lv_font_montserrat_22,
+    lv_obj_t *title = make_label(header, "系统设置", &ui_font_22,
                                  COLOR_TEXT);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, -8);
-    lv_obj_t *subtitle = make_label(header, "DEVICE CONFIG",
-                                    &lv_font_montserrat_12, COLOR_MUTED);
+    lv_obj_t *subtitle = make_label(header, "设备参数",
+                                    &ui_font_16, COLOR_MUTED);
     lv_obj_align(subtitle, LV_ALIGN_LEFT_MID, 12, 14);
 
     lv_obj_t *card = lv_obj_create(s_settings_view);
     lv_obj_set_size(card, 440, 346);
     lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 76);
     set_bg(card, COLOR_CARD);
+    lv_obj_set_style_pad_all(card, 0, 0);
     lv_obj_set_style_radius(card, 28, 0);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_MAGENTA), 0);
     lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
     create_setting_slider(card, 0, SETTING_BALL_SENSITIVITY,
-                          "BALL SENSITIVITY", 50, 200, settings.ball_sensitivity);
+                          "小球灵敏度", 50, 200, settings.ball_sensitivity);
     create_setting_slider(card, 61, SETTING_BALL_LIMIT,
-                          "BALL OUTPUT LIMIT", 20, 100, settings.ball_limit);
+                          "小球范围与输出上限", 20, 100, settings.ball_limit);
     create_setting_slider(card, 122, SETTING_MOTION_SENSITIVITY,
-                          "MOTION SENSITIVITY", 50, 200, settings.motion_sensitivity);
+                          "体感灵敏度", 50, 200, settings.motion_sensitivity);
     create_setting_slider(card, 183, SETTING_BRIGHTNESS,
-                          "DISPLAY BRIGHTNESS", 10, 100, settings.brightness);
+                          "屏幕亮度", 10, 100, settings.brightness);
 
-    lv_obj_t *battery_title = make_label(card, "BATTERY LEVEL",
-                                         &lv_font_montserrat_14, COLOR_TEXT);
-    lv_obj_set_pos(battery_title, 16, 252);
-    s_battery_label = make_label(card, "READING...", &lv_font_montserrat_14,
+    lv_obj_t *battery_title = make_label(card, "电池电量",
+                                         &ui_font_16, COLOR_TEXT);
+    lv_obj_set_pos(battery_title, 20, 262);
+    s_battery_label = make_label(card, "读取中...", &ui_font_16,
                                  COLOR_MUTED);
-    lv_obj_set_pos(s_battery_label, 265, 252);
+    lv_obj_align(s_battery_label, LV_ALIGN_TOP_RIGHT, -20, 262);
 
     s_battery_bar = lv_bar_create(card);
-    lv_obj_set_size(s_battery_bar, 386, 24);
-    lv_obj_set_pos(s_battery_bar, 15, 286);
+    lv_obj_set_size(s_battery_bar, 396, 24);
+    lv_obj_set_pos(s_battery_bar, 20, 296);
     lv_bar_set_range(s_battery_bar, 0, 100);
     lv_bar_set_value(s_battery_bar, 0, LV_ANIM_OFF);
     lv_obj_set_style_radius(s_battery_bar, 12, LV_PART_MAIN);
@@ -901,13 +923,13 @@ static void create_settings_view(lv_obj_t *screen)
 static const char *state_text(ble_app_state_t state)
 {
     switch (state) {
-    case BLE_APP_STARTING: return "BLE STARTING";
-    case BLE_APP_IDLE: return "BLE IDLE";
-    case BLE_APP_SCANNING: return "SCANNING";
-    case BLE_APP_CONNECTING: return "CONNECTING";
-    case BLE_APP_DISCOVERING: return "GATT SETUP";
-    case BLE_APP_READY: return "CONNECTED";
-    default: return "BLE ERROR";
+    case BLE_APP_STARTING: return "蓝牙初始化";
+    case BLE_APP_IDLE: return "蓝牙待机";
+    case BLE_APP_SCANNING: return "正在扫描";
+    case BLE_APP_CONNECTING: return "正在连接";
+    case BLE_APP_DISCOVERING: return "正在配置服务";
+    case BLE_APP_READY: return "已连接";
+    default: return "蓝牙异常";
     }
 }
 
@@ -937,10 +959,10 @@ static void ui_timer_cb(lv_timer_t *timer)
     char value[8];
     snprintf(value, sizeof(value), "%u", game.intensity);
     lv_label_set_text(s_game_value, value);
-    lv_label_set_text(s_game_start_label, game.running ? "STOP" : "START");
+    lv_label_set_text(s_game_start_label, game.running ? "停止" : "启动");
     lv_label_set_text(s_game_hint,
-        game.calibrating ? "Calibrating... keep still" :
-        (game.imu_ok ? "Press BOOT to reset center" : "IMU not available"));
+        game.calibrating ? "校准中，请保持静止" :
+        (game.imu_ok ? "按启动键重置中心" : "运动传感器未就绪"));
 
     imu_motion_snapshot_t motion;
     imu_motion_get_snapshot(&motion);
@@ -948,16 +970,16 @@ static void ui_timer_cb(lv_timer_t *timer)
     snprintf(motion_value, sizeof(motion_value), "%u%%", motion.intensity);
     lv_label_set_text(s_motion_value, motion_value);
     char acceleration[40];
-    snprintf(acceleration, sizeof(acceleration), "LINEAR ACCEL  %.2f m/s2",
+    snprintf(acceleration, sizeof(acceleration), "加速度 %.2f 米/秒²",
              motion.acceleration);
     lv_label_set_text(s_motion_accel, acceleration);
     lv_bar_set_value(s_motion_bar, motion.intensity, LV_ANIM_OFF);
-    lv_label_set_text(s_motion_start_label, motion.running ? "STOP" : "START");
+    lv_label_set_text(s_motion_start_label, motion.running ? "停止" : "启动");
     lv_label_set_text(s_motion_state,
-        !motion.imu_ok ? "IMU NOT AVAILABLE" :
-        !motion.running ? "STOPPED" :
-        motion.moving ? "MOVING - SENDING OUTPUT" :
-                        "STILL - NO REPEATED COMMANDS");
+        !motion.imu_ok ? "运动传感器未就绪" :
+        !motion.running ? "已停止" :
+        motion.moving ? "运动中，正在输出" :
+                        "已静止，暂停发送指令");
     lv_obj_set_style_text_color(s_motion_state,
         lv_color_hex(motion.moving ? COLOR_GREEN : COLOR_MUTED), 0);
 
@@ -966,7 +988,7 @@ static void ui_timer_cb(lv_timer_t *timer)
     char pattern_value[12];
     snprintf(pattern_value, sizeof(pattern_value), "%u%%", pattern.intensity);
     lv_label_set_text(s_pattern_value, pattern_value);
-    lv_label_set_text(s_pattern_start_label, pattern.running ? "STOP" : "START");
+    lv_label_set_text(s_pattern_start_label, pattern.running ? "停止" : "启动");
     for (int i = 0; i < PATTERN_COUNT; ++i) {
         lv_obj_set_style_bg_color(s_pattern_buttons[i],
             lv_color_hex(i == pattern.selected ? COLOR_MAGENTA : COLOR_CARD_2), 0);
@@ -976,18 +998,18 @@ static void ui_timer_cb(lv_timer_t *timer)
     power_status_get(&power);
     char battery[32];
     if (!power.available) {
-        snprintf(battery, sizeof(battery), "UNAVAILABLE");
+        snprintf(battery, sizeof(battery), "暂不可用");
         lv_bar_set_value(s_battery_bar, 0, LV_ANIM_OFF);
         lv_obj_set_style_text_color(s_battery_label,
                                     lv_color_hex(COLOR_MUTED), 0);
     } else if (!power.battery_connected) {
-        snprintf(battery, sizeof(battery), "NO BATTERY");
+        snprintf(battery, sizeof(battery), "未接电池");
         lv_bar_set_value(s_battery_bar, 0, LV_ANIM_OFF);
         lv_obj_set_style_text_color(s_battery_label,
                                     lv_color_hex(COLOR_MUTED), 0);
     } else {
         snprintf(battery, sizeof(battery), "%u%%  %s", power.percent,
-                 power.charging ? "CHARGING" : "BATTERY");
+                 power.charging ? "充电中" : "电池供电");
         lv_bar_set_value(s_battery_bar, power.percent, LV_ANIM_OFF);
         lv_obj_set_style_text_color(s_battery_label,
                                     lv_color_hex(COLOR_GREEN), 0);
@@ -999,6 +1021,8 @@ void app_ui_create(void)
 {
     lv_obj_t *screen = lv_screen_active();
     set_bg(screen, COLOR_BG);
+    lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(screen, LV_SCROLLBAR_MODE_OFF);
 
     create_home_view(screen);
     create_ble_view(screen);

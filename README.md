@@ -8,8 +8,13 @@ Target: Waveshare ESP32-S3-Touch-AMOLED-2.16 (480 x 480 AMOLED).
 - Swipeable home screen: the first 2 x 2 page contains Control, BLE,
   Balance Ball, and Motion; the second page contains Settings, Vibration
   Patterns, and two reserved cards.
+- Both home pages use equal square grid cells, 24 px inner margins and 20 px
+  gaps. All interface labels and status messages are in Chinese, using bundled
+  Source Han Sans glyphs (see `main/fonts/README.md`).
 - BLE GATT write to `0000ee03-0000-1000-8000-00805f9b34fb`.
 - Independent 0-100 vertical controls for suction, vibration, and electric output.
+- Each control uses a 200 x 268 px rectangular touch area with a bottom-up fill
+  and a centered percentage; drag anywhere on the bar to change intensity.
 - Manual suction, vibration, and electric values persist independently while
   moving between control pages, so all three can run at the same time.
 - Horizontal swipe switches only between the three motor-control pages.

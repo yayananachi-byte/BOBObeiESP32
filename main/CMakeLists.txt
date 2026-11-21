@@ -7,6 +7,8 @@ idf_component_register(
         "power_status.c"
         "pattern_control.c"
         "ui.c"
+        "fonts/ui_font_16.c"
+        "fonts/ui_font_22.c"
     INCLUDE_DIRS "."
     REQUIRES bt nvs_flash esp_driver_gpio esp_driver_i2c
 )
